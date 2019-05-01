@@ -993,7 +993,7 @@ struct MemberDescription<'ll> {
     size: Size,
     align: Align,
     flags: DIFlags,
-    discriminant: Option<u64>,
+    discriminant: Option<u128>,
 }
 
 // A factory for MemberDescriptions. It produces a list of member descriptions
@@ -1351,7 +1351,7 @@ impl EnumMemberDescriptionFactory<'ll, 'tcx> {
                         flags: DIFlags::FlagZero,
                         discriminant: Some(self.layout.ty.ty_adt_def().unwrap()
                                            .discriminant_for_variant(cx.tcx, i)
-                                           .val as u64),
+                                           .val),
                     }
                 }).collect()
             }
@@ -1450,12 +1450,7 @@ impl EnumMemberDescriptionFactory<'ll, 'tcx> {
                             let value = (i.as_u32() as u128)
                                 .wrapping_sub(niche_variants.start().as_u32() as u128)
                                 .wrapping_add(niche_start);
-                            let value = truncate(value, discr.value.size(cx));
-                            // NOTE(eddyb) do *NOT* remove this assert, until
-                            // we pass the full 128-bit value to LLVM, otherwise
-                            // truncation will be silent and remain undetected.
-                            assert_eq!(value as u64 as u128, value);
-                            Some(value as u64)
+                            Some(truncate(value, discr.value.size(cx)))
                         };
 
                         MemberDescription {
@@ -1928,7 +1923,8 @@ fn set_members_of_composite_type(cx: &CodegenCx<'ll, 'tcx>,
                     member_description.offset.bits(),
                     match member_description.discriminant {
                         None => None,
-                        Some(value) => Some(cx.const_u64(value)),
+                        Some(value) =>
+                            Some(cx.const_uint_big(cx.type_i128(), value)),
                     },
                     member_description.flags,
                     member_description.type_metadata))
